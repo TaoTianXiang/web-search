@@ -5,7 +5,7 @@
         <RouterLink to="/" class="brand">
           <span class="brand-mark">FE</span>
           <span class="brand-text">
-            <strong>陶天祥的面试进阶手册</strong>
+            <strong>不想冒泡的面试进阶手册</strong>
             <em>中级 → 高级工程师的知识地图</em>
           </span>
         </RouterLink>

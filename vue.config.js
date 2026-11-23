@@ -1,6 +1,7 @@
 const { defineConfig } = require('@vue/cli-service')
 
 module.exports = defineConfig({
+  publicPath: '/websearch/',
   transpileDependencies: true,
   chainWebpack(config) {
     // 以字符串形式引入 Markdown 教材内容
