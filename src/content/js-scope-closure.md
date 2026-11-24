@@ -247,18 +247,19 @@ const api = {
 ## 手写 bind
 
 ```js
-Function.prototype.myBind = function (context, ...args) {
+Function.prototype.myBind = function (context, ...presetArgs) {
   const fn = this
-  const noop = function () {}
-  const bound = function (...rest) {
-    // 用 new 调用时，this 指向新对象
-    const isNew = this instanceof bound
-    return fn.apply(isNew ? this : context, [...args, ...rest])
+  function bound(...args) {
+    if (new.target) {
+      return Reflect.construct(
+        fn,
+        [...presetArgs, ...args],
+        new.target === bound ? fn : new.target
+      )
+    }
+    return fn.apply(context, [...presetArgs, ...args])
   }
-  if (fn.prototype) {
-    noop.prototype = fn.prototype
-    bound.prototype = new noop()
-  }
+
   return bound
 }
 ```
