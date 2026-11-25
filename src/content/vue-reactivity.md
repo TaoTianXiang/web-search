@@ -1,4 +1,4 @@
-Vue 3 的响应式从 `Object.defineProperty` 换成了 `Proxy`。这不只是实现细节变化，而是能力边界的扩展。面试要能讲清"依赖收集的完整链路"和"为什么需要调度器"。
+Vue 3 的响应式从 `Object.defineProperty` 换成了 `Proxy`。这不只是实现细节变化，而是能力边界的扩展。面试要能讲清"{{依赖收集}}的完整链路"和"为什么需要调度器"。
 
 ## 三件套的关系
 
@@ -25,10 +25,16 @@ import { reactive, effect } from 'vue'
 const state = reactive({ count: 0 })
 
 effect(() => {
-  console.log(state.count) // 读取时收集
+  console.log('effect 执行，count =', state.count) // 读取时收集
 })
 
 state.count++ // 写入时触发
+state.count++
+
+// 输出：
+// effect 执行，count = 0
+// effect 执行，count = 1
+// effect 执行，count = 2
 ```
 
 内部展开：
@@ -159,12 +165,17 @@ state.n++                      // 直接访问
 ```js
 // 解构丢失
 const state = reactive({ a: 1, b: 2 })
-const { a } = state         // a 是普通数字
-const aRef = toRef(state, 'a') // 保留
+const { a } = state            // a 是普通数字，后续 state.a++ 不会更新 a
+const aRef = toRef(state, 'a') // 保留响应性
+
+state.a = 10
+a // 仍是 1
+aRef.value // 10
 
 // 整体替换
 let state2 = reactive({ x: 1 })
-state2 = { x: 2 }           // ❌ 丢失响应性，应改回 state2.x = 2 或用 ref
+state2 = { x: 2 }              // ❌ 丢失响应性，应改回 state2.x = 2 或用 ref
+isReactive(state2)             // false
 ```
 
 ### 模板中的自动解包
@@ -191,7 +202,7 @@ obj.count // 仍是 Ref 对象，需要 obj.count.value
 ## 浅响应与性能
 
 ```js
-import { shallowRef, shallowReactive, markRaw } from 'vue'
+import { shallowRef, shallowReactive, markRaw, isReactive } from 'vue'
 
 // 大数组只需要整体替换时
 const list = shallowRef([])
@@ -199,11 +210,16 @@ list.value = newList // 触发
 
 // 只关心顶层属性
 const state = shallowReactive({ a: 1, nested: { b: 2 } })
-state.a++ // 触发
+state.a++        // 触发
 state.nested.b++ // 不触发
 
 // 明确告诉 Vue 不要代理
 const chart = markRaw(new Chart(...))
+isReactive(chart) // false
+
+// 对比：普通 reactive 会深度代理
+const deep = reactive({ nested: { b: 2 } })
+isReactive(deep.nested) // true
 ```
 
 ::: tip 性能判断
@@ -227,6 +243,22 @@ effect(() => {
 ```
 
 如果不清理旧依赖，`a` 变化时仍会触发。Vue 在 effect 每次执行前会清空自身的 `deps`，然后重新收集。这就是 `activeEffect.deps.push(dep)` 存在的意义。
+
+```js
+// 用 Vue 的 API 直接观察这个行为
+const flag = ref(true)
+const a = ref('a')
+const b = ref('b')
+const log = []
+
+watchEffect(() => {
+  log.push(flag.value ? a.value : b.value)
+})
+
+flag.value = false   // log: ['a', 'b']
+a.value = 'a2'       // 不触发，因为已切到 b 分支
+b.value = 'b2'       // 触发，log: ['a', 'b', 'b2']
+```
 
 ## 与 Vue 2 的差异总结
 
@@ -257,6 +289,24 @@ effect(() => {
 **Q：如何实现一个简易响应式？**
 
 ```js
+const targetMap = new WeakMap()
+let activeEffect = null
+
+function track(target, key) {
+  if (!activeEffect) return
+  let depsMap = targetMap.get(target)
+  if (!depsMap) targetMap.set(target, (depsMap = new Map()))
+  let dep = depsMap.get(key)
+  if (!dep) depsMap.set(key, (dep = new Set()))
+  dep.add(activeEffect)
+}
+
+function trigger(target, key) {
+  const dep = targetMap.get(target)?.get(key)
+  if (!dep) return
+  ;[...dep].forEach((e) => e())
+}
+
 function reactive(obj) {
   return new Proxy(obj, {
     get(target, key) {
@@ -271,6 +321,17 @@ function reactive(obj) {
     }
   })
 }
+
+function effect(fn) {
+  activeEffect = fn
+  fn()
+  activeEffect = null
+}
+
+// 验证
+const state = reactive({ count: 0 })
+effect(() => console.log('count =', state.count)) // → count = 0
+state.count++                                     // → count = 1
 ```
 
 要点：`Reflect` 保证 receiver 语义正确，嵌套对象需要递归包装（或惰性包装）。

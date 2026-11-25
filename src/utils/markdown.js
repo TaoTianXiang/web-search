@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it'
 import mdContainer from 'markdown-it-container'
 import hljs from 'highlight.js/lib/core'
+import { lookupTerm } from '@/data/glossary'
 
 import javascript from 'highlight.js/lib/languages/javascript'
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -52,6 +53,32 @@ function slugify(text) {
     .replace(/\s+/g, '-')
 }
 
+/**
+ * {{术语}} / {{术语|显示文字}}
+ * 只在正文文本节点里生效（代码块、行内代码不受影响）。
+ */
+function glossaryRule(state) {
+  const start = state.pos
+  const src = state.src
+  if (src.charCodeAt(start) !== 0x7b || src.charCodeAt(start + 1) !== 0x7b) return false
+
+  const end = src.indexOf('}}', start + 2)
+  if (end < 0) return false
+
+  const raw = src.slice(start + 2, end)
+  // 术语内不允许换行，避免误吞正文
+  if (!raw || raw.includes('\n') || raw.length > 60) return false
+
+  const [key, label] = raw.split('|')
+  const entry = lookupTerm(key)
+  if (!entry) return false
+
+  const token = state.push('glossary_term', 'span', 0)
+  token.meta = { id: entry.id, term: entry.term, short: entry.short, label: (label || key).trim() }
+  state.pos = end + 2
+  return true
+}
+
 function createRenderer(toc) {
   const md = new MarkdownIt({
     html: false,
@@ -96,6 +123,7 @@ function createRenderer(toc) {
     }
   })
 
+  // 自定义容器
   const containers = [
     ['tip', 'md-tip', '要点'],
     ['warn', 'md-warn', '注意'],
@@ -117,11 +145,26 @@ function createRenderer(toc) {
     })
   })
 
-  // 表格外层包滚动容器（table 自身保持 display: table，避免列宽被压缩）
-    md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
-    md.renderer.rules.table_close = () => '</table></div>\n'
+  // {{术语}} → 可点击词条
+  md.inline.ruler.before('emphasis', 'glossary_term', glossaryRule)
+  md.renderer.rules.glossary_term = (tokens, idx) => {
+    const { id, term, short, label } = tokens[idx].meta
+    const attrs = [
+      'class="gloss"',
+      'type="button"',
+      `data-gloss-id="${md.utils.escapeHtml(id)}"`,
+      `data-gloss-term="${md.utils.escapeHtml(term)}"`,
+      `data-gloss-short="${md.utils.escapeHtml(short)}"`,
+      'aria-label="查看术语解释"'
+    ].join(' ')
+    return `<button ${attrs}>${md.utils.escapeHtml(label)}</button>`
+  }
 
-    return md
+  // 表格外层包滚动容器（table 自身保持 display: table，避免列宽被压缩）
+  md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+  md.renderer.rules.table_close = () => '</table></div>\n'
+
+  return md
 }
 
 export function renderMarkdown(source) {
@@ -135,6 +178,7 @@ export function renderMarkdown(source) {
 export function stripMarkdown(source) {
   return (source || '')
     .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\{\{([^}|]*)(?:\|([^}]*))?\}\}/g, (_, key, label) => label || key)
     .replace(/:::\s*\w+/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

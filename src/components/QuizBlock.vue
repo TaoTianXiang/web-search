@@ -13,7 +13,7 @@
           type="button"
           class="option"
           :class="optionClass(qi, oi)"
-          :disabled="Boolean(picked[qi])"
+          :disabled="picked[qi] !== undefined"
           @click="choose(qi, oi)"
         >
           <span class="option-key">{{ String.fromCharCode(65 + oi) }}</span>
@@ -57,6 +57,8 @@ export default {
   },
   setup(props) {
     const picked = ref({})
+    // 作答所属章节：防止切换章节的瞬间把旧作答记到新章节名下
+    const pickedSlug = ref(props.slug)
 
     const answeredCount = computed(() => Object.keys(picked.value).length)
     const correctCount = computed(() =>
@@ -71,6 +73,7 @@ export default {
 
     function choose(qi, oi) {
       if (picked.value[qi] !== undefined) return
+      pickedSlug.value = props.slug
       picked.value = { ...picked.value, [qi]: oi }
     }
 
@@ -91,10 +94,20 @@ export default {
       picked.value = {}
     }
 
+    // 章节切换时组件实例会被复用，必须清空作答，否则上一章的选项会串到下一章
+    watch(
+      () => props.slug,
+      (slug) => {
+        picked.value = {}
+        pickedSlug.value = slug
+      }
+    )
+
     watch([picked, correctCount], () => {
-          const answered = Object.keys(picked.value).length
-          if (answered === props.questions.length) {
-            saveQuizResult(props.slug, correctCount.value, props.questions.length)
+      const answered = Object.keys(picked.value).length
+      // 只在「当前这道题属于当前章节」且全部作答后才记录成绩
+      if (answered === props.questions.length && pickedSlug.value === props.slug) {
+        saveQuizResult(props.slug, correctCount.value, props.questions.length)
       }
     })
 

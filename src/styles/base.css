@@ -201,6 +201,42 @@ button {
   transform: translateY(-2px);
 }
 
+/* 术语词条：正文中的可点击词 */
+.gloss {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: rgba(51, 85, 255, 0.45);
+  text-underline-offset: 3px;
+  transition: 0.14s ease;
+}
+
+.gloss:hover,
+.gloss:focus-visible {
+  color: var(--brand-dark);
+  text-decoration-color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 3px;
+  outline: none;
+}
+
+.gloss::after {
+  content: '?';
+  font-size: 0.62em;
+  vertical-align: super;
+  line-height: 1;
+  margin-left: 1px;
+  color: var(--brand);
+  opacity: 0.55;
+  font-weight: 600;
+}
+
 /* ---------- Markdown 正文 ---------- */
 .prose {
   color: var(--text);

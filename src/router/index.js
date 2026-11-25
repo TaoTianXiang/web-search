@@ -22,6 +22,12 @@ const routes = [
     component: () => import('@/views/CheatsheetView.vue'),
     meta: { title: '知识点速查' }
   },
+  {
+    path: '/glossary',
+    name: 'glossary',
+    component: () => import('@/views/GlossaryView.vue'),
+    meta: { title: '术语词条' }
+  },
   { path: '/mock', name: 'mock', component: () => import('@/views/MockView.vue'), meta: { title: '模拟面试' } },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]

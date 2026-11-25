@@ -39,18 +39,20 @@
     </footer>
 
     <SearchPalette v-model="searchOpen" />
+    <GlossaryPopover />
   </div>
 </template>
 
 <script>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import SearchPalette from '@/components/SearchPalette.vue'
+import GlossaryPopover from '@/components/GlossaryPopover.vue'
 import { allSections } from '@/data/curriculum'
 import { questionBank } from '@/data/questions'
 
 export default {
   name: 'App',
-  components: { SearchPalette },
+  components: { SearchPalette, GlossaryPopover },
   setup() {
     const searchOpen = ref(false)
     const navItems = [
@@ -58,6 +60,7 @@ export default {
       { to: '/learn/js-types', label: '教材' },
       { to: '/questions', label: '题库' },
       { to: '/cheatsheet', label: '速查' },
+      { to: '/glossary', label: '词条' },
       { to: '/mock', label: '模拟面试' }
     ]
 

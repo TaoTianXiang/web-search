@@ -34,7 +34,7 @@ setTimeout(() => console.log('B'))
 Promise.resolve().then(() => console.log('C'))
 queueMicrotask(() => console.log('D'))
 console.log('E')
-// A E C D B
+// → A E C D B
 ```
 
 ### 微任务可以饿死渲染
@@ -75,7 +75,7 @@ const p = new Promise((resolve, reject) => {
   resolve(1)
   reject(2) // 被忽略，状态已锁定
 })
-p.then(console.log) // 1
+p.then(console.log) // → 1
 ```
 
 四个关键语义：
@@ -163,7 +163,7 @@ async function a() {
 console.log('start')
 a()
 console.log('end')
-// start a1 end a2
+// → start a1 end a2
 ```
 
 `await null` 也会让出一次微任务。这是很多人以为"await 同步值不会让出"的误区。
@@ -207,6 +207,26 @@ async function g() {
 ```
 
 两者对外都是 `Promise<1>`，但 `return await` 会在 try/catch 中捕获错误，`return` 不会。在 try 块内必须用 `return await`。
+
+```js
+async function noCatch() {
+  try {
+    return Promise.reject(new Error('x'))   // 错误逃逸，外层拿不到
+  } catch {
+    return 'caught'
+  }
+}
+async function withCatch() {
+  try {
+    return await Promise.reject(new Error('x')) // 被 catch 捕获
+  } catch {
+    return 'caught'
+  }
+}
+
+noCatch().catch((e) => console.log(e.message))   // → "x"（没被捕获）
+withCatch().then((v) => console.log(v))           // → "caught"
+```
 
 ## 并发控制
 

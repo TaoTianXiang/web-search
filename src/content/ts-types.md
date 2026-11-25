@@ -15,9 +15,15 @@ const q: Point = p // ✅ 多余的 z 不报错（对象字面量除外）
 
 ```ts
 const r: Point = { x: 1, y: 2, z: 3 } // ❌ 对象字面量不能有未知属性
+// Object literal may only specify known properties,
+// and 'z' does not exist in type 'Point'.
+
+// 绕过检查（不推荐，但要知道它为什么存在）
+const r2 = { x: 1, y: 2, z: 3 } as Point
+r2.z // 3，类型系统已经"看不见"z 了
 ```
 
-这是"精确性"与"灵活性"的折中。
+这是"精确性"与"灵活性"的折中：字面量检查能抓住拼写错误，变量赋值则为鸭子类型留出空间。
 
 ### 协变与逆变
 
@@ -25,19 +31,25 @@ const r: Point = { x: 1, y: 2, z: 3 } // ❌ 对象字面量不能有未知属�
 interface Animal { name: string }
 interface Dog extends Animal { bark(): void }
 
-let a: Animal
-let d: Dog
-a = d // ✅ 协变：子类型可赋给父类型
+const d: Dog = { name: 'd', bark() { console.log('woof') } }
+const a: Animal = d // ✅ 协变：子类型可赋给父类型
+
+a.bark() // ❌ 类型上不存在，编译器阻止你调用
 ```
 
 函数参数是**逆变**（strictFunctionTypes 下），返回值是**协变**：
 
 ```ts
 type Handler = (e: Animal) => void
-const h: Handler = (e: Dog) => {} // ❌ 参数逆变，不能更窄
+
+const h: Handler = (e: Dog) => { e.bark() } // ❌ 参数逆变，不能更窄
+// Types of parameters 'e' and 'e' are incompatible.
+
+// ✅ 反过来是安全的：接受更宽的参数
+const h2: (e: Dog) => void = (e: Animal) => { console.log(e.name) }
 ```
 
-实际开发中，这条规则解释了为什么回调参数往往需要写成更宽的类型。
+为什么参数要逆变？调用方按 `Animal` 传参，实现却只接受 `Dog`，运行时就会炸。实际开发中，这条规则解释了为什么回调参数往往需要写成更宽的类型。
 
 ## 泛型：从使用到设计
 
@@ -59,7 +71,10 @@ function pluck<T, K extends keyof T>(list: T[], key: K): T[K][] {
   return list.map((item) => item[key])
 }
 
-pluck([{ id: 1, name: 'a' }], 'name') // string[]
+const names = pluck([{ id: 1, name: 'a' }, { id: 2, name: 'b' }], 'name')
+// names: string[]
+
+pluck([{ id: 1 }], 'nope') // ❌ "nope" 不能赋给 "id"
 ```
 
 `K extends keyof T` 是最常用的约束模式：保证 key 一定存在，返回值类型自动推导。
@@ -72,6 +87,9 @@ interface ApiResponse<T = unknown> {
   data: T
   message?: string
 }
+
+const res: ApiResponse = { code: 0, data: null }          // data 为 unknown
+const res2: ApiResponse<string[]> = { code: 0, data: [] } // data 为 string[]
 ```
 
 ### 泛型与重载
@@ -83,6 +101,10 @@ function createEl(tag: string): HTMLElement
 function createEl(tag: string): HTMLElement {
   return document.createElement(tag)
 }
+
+const div = createEl('div')       // HTMLDivElement
+const canvas = createEl('canvas') // HTMLCanvasElement
+const el = createEl('section')    // HTMLElement
 ```
 
 重载签名对调用方可见，实现签名不可见。更现代的写法是用条件类型映射：

@@ -43,8 +43,8 @@ template 字符串
 1. **静态节点提升**（hoistStatic）
 2. **静态属性提升**
 3. **缓存事件处理函数**（cacheHandlers）
-4. **生成 PatchFlags**
-5. **构建 Block Tree**
+4. **生成 {{PatchFlag}}**
+5. **构建 {{Block Tree}}**
 
 ### generate 阶段
 
@@ -115,6 +115,17 @@ createElementVNode('div', { class: _ctx.cls, id: _ctx.id }, toDisplayString(_ctx
 ```
 
 运行时 diff 看到 `7`，就知道只需要比对 `class`、属性与文本，**不必遍历全部属性**。
+
+用位运算判断标记，是理解这套机制的关键：
+
+```js
+const PatchFlags = { TEXT: 1, CLASS: 2, STYLE: 4, PROPS: 8 }
+
+const flag = 7 // TEXT | CLASS | PROPS
+flag & PatchFlags.STYLE // 0 → 无需比对 style
+```
+
+一个标记位同时表达多个维度，diff 时用 `&` 逐项判断，避免字符串比较与数组遍历。
 
 ::: warn 编译优化的前提
 优化依赖"模板是静态可分析的"。以下情况会退化：
@@ -200,8 +211,58 @@ while (i <= e1 && i <= e2) {
 Vue 的做法：
 
 1. 为新列表中的每个节点建立"旧索引"映射
-2. 对旧索引序列求**最长递增子序列**（这些节点相对顺序不变，不需要移动）
+2. 对旧索引序列求**{{最长递增子序列}}**（这些节点相对顺序不变，不需要移动）
 3. 从后向前遍历，只移动不在 LIS 中的节点
+
+先单独把 LIS 算法跑通，再看它在 diff 里的用法：
+
+```js
+// 返回 LIS 的下标数组，O(n log n)
+function getSequence(arr) {
+  const p = arr.slice()          // 前驱索引
+  const result = [0]
+  let i, j, u, v, c
+  const len = arr.length
+
+  for (i = 0; i < len; i++) {
+    const arrI = arr[i]
+    if (arrI !== 0) {            // 0 表示新增节点，不参与
+      j = result[result.length - 1]
+      if (arr[j] < arrI) {
+        p[i] = j
+        result.push(i)
+        continue
+      }
+      u = 0
+      v = result.length - 1
+      while (u < v) {            // 二分查找插入位置
+        c = (u + v) >> 1
+        if (arr[result[c]] < arrI) u = c + 1
+        else v = c
+      }
+      if (arrI < arr[result[u]]) {
+        if (u > 0) p[i] = result[u - 1]
+        result[u] = i
+      }
+    }
+  }
+
+  // 回溯前驱，还原真实下标
+  u = result.length
+  v = result[u - 1]
+  while (u-- > 0) {
+    result[u] = v
+    v = p[v]
+  }
+  return result
+}
+
+// 验证：旧列表 a b c d e，新列表 a c d b e
+// 新节点在旧列表中的索引序列
+const oldIndexes = [0, 2, 3, 1, 4]
+console.log(getSequence(oldIndexes))  // → [0, 1, 2, 4]
+// 对应索引 0,2,3,4 的节点（a c d e）保持不动，只需移动 b
+```
 
 ```js
 // getSequence 返回 LIS 的索引数组，O(n log n)

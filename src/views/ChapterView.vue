@@ -26,11 +26,44 @@
 
     <main class="content">
       <div class="breadcrumb">
-        <RouterLink to="/">首页</RouterLink>
-        <span>/</span>
-        <span>{{ section.chapterTitle }}</span>
-        <span>/</span>
-        <strong>{{ section.title }}</strong>
+        <RouterLink to="/" class="crumb-home">首页</RouterLink>
+        <span class="crumb-sep">/</span>
+
+        <div ref="pickerRef" class="crumb-picker">
+          <button
+            class="crumb-trigger"
+            type="button"
+            aria-haspopup="true"
+            :aria-expanded="pickerOpen"
+            @click="pickerOpen = !pickerOpen"
+          >
+            <span class="crumb-chapter">{{ section.chapterTitle }}</span>
+            <span class="crumb-sep crumb-sep-inner">/</span>
+            <strong class="crumb-current">{{ section.title }}</strong>
+            <span class="crumb-caret" :class="{ open: pickerOpen }">▾</span>
+          </button>
+
+          <div v-if="pickerOpen" class="crumb-panel">
+            <div v-for="chapter in chapters" :key="chapter.id" class="picker-group">
+              <p class="picker-group-title">
+                <span class="group-dot" :style="{ background: chapter.accent }" />
+                {{ chapter.title }}
+              </p>
+              <RouterLink
+                v-for="item in chapter.sections"
+                :key="item.slug"
+                :to="`/learn/${item.slug}`"
+                class="picker-item"
+                :class="{ active: item.slug === section.slug }"
+                @click="pickerOpen = false"
+              >
+                <span class="nav-check" :class="{ done: isRead(item.slug) }" />
+                <span class="picker-text">{{ item.title }}</span>
+                <span class="picker-min">{{ item.minutes }}′</span>
+              </RouterLink>
+            </div>
+          </div>
+        </div>
       </div>
 
       <header class="chapter-head">
@@ -122,6 +155,8 @@ export default {
     const route = useRoute()
     const toc = ref([])
     const doc = ref('')
+        const pickerOpen = ref(false)
+        const pickerRef = ref(null)
     let readTimer = null
 
     const section = computed(() => getSection(route.params.slug))
@@ -162,15 +197,26 @@ export default {
       if (ratio > 0.6) markRead(section.value.slug)
     }
 
+        function onDocumentClick(event) {
+              if (pickerOpen.value && pickerRef.value && !pickerRef.value.contains(event.target)) {
+                pickerOpen.value = false
+              }
+            }
+
+            function onKeydown(event) {
+              if (event.key === 'Escape') pickerOpen.value = false
+            }
+
     watch(
       () => route.params.slug,
       (slug) => {
+                pickerOpen.value = false
         const target = getSection(slug)
         doc.value = target ? getDoc(slug) : ''
         toc.value = []
-            if (target) {
-              document.title = `${target.title} · 前端面试进阶手册`
-            }
+                if (target) {
+                  document.title = `${target.title} · 前端面试进阶手册`
+                }
         nextTick(() => {
           if (target) startReadTimer(slug)
         })
@@ -178,13 +224,32 @@ export default {
       { immediate: true }
     )
 
-    onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+            onMounted(() => {
+              window.addEventListener('scroll', onScroll, { passive: true })
+              document.addEventListener('click', onDocumentClick)
+              window.addEventListener('keydown', onKeydown)
+            })
     onBeforeUnmount(() => {
       window.removeEventListener('scroll', onScroll)
+              document.removeEventListener('click', onDocumentClick)
+              window.removeEventListener('keydown', onKeydown)
       cleanupReadTimer()
     })
 
-    return { chapters, section, neighbors, quiz, quizScore, toc, doc, onToc, scrollTo, isRead }
+            return {
+              chapters,
+              section,
+              neighbors,
+              quiz,
+              quizScore,
+              toc,
+              doc,
+              pickerOpen,
+              pickerRef,
+              onToc,
+              scrollTo,
+              isRead
+            }
   }
 }
 </script>
@@ -308,9 +373,121 @@ export default {
   flex-wrap: wrap;
 }
 
-.breadcrumb strong {
+.crumb-sep {
+  color: var(--border-strong);
+}
+
+.crumb-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.crumb-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 3px 8px;
+  margin: -3px -8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--text-mute);
+  transition: 0.14s ease;
+}
+
+.crumb-trigger:hover,
+.crumb-trigger[aria-expanded='true'] {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.crumb-chapter {
+  white-space: nowrap;
+}
+
+.crumb-current {
   color: var(--text-soft);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumb-caret {
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+
+.crumb-caret.open {
+  transform: rotate(180deg);
+}
+
+.crumb-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.picker-group + .picker-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.picker-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-mute);
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.picker-item:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.picker-item.active {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+.picker-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-min {
+  font-size: 11px;
+  color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
 }
 
 .chapter-head {
@@ -486,6 +663,29 @@ export default {
   }
   .chapter-nav {
     grid-template-columns: 1fr;
+  }
+
+  /* 移动端侧栏被隐藏，顶部选择器成为主要导航入口 */
+  .crumb-trigger {
+    margin: 0;
+    padding: 5px 10px;
+    border-color: var(--border-strong);
+    background: var(--surface);
+    color: var(--text-soft);
+  }
+  .crumb-chapter {
+    display: none;
+  }
+  .crumb-sep-inner {
+    display: none;
+  }
+  .crumb-panel {
+    position: fixed;
+    top: calc(var(--header-h) + 8px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100vh - var(--header-h) - 24px);
   }
 }
 </style>
